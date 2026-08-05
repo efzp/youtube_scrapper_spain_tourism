@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-spain-tourism"
+version = "0.1.0"
+description = "Pipeline local para recopilar metadatos publicos de videos turisticos de Espana"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "google-api-python-client>=2.140,<3",
+  "isodate>=0.6,<1",
+  "openpyxl>=3.1,<4",
+  "pandas>=2.2,<3",
+  "pyarrow>=17",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[project.scripts]
+youtube-spain-tourism = "src.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
