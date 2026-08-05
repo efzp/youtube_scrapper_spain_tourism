@@ -1,3 +1,4 @@
 azure-functions>=1.23,<2
 google-api-python-client>=2.140,<3
+isodate>=0.6,<1
 mssql-python>=1,<2
