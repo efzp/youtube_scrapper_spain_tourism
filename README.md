@@ -1,67 +1,85 @@
 # YouTube Spain Tourism
 
-MVP local y académico para buscar videos sobre municipios turísticos de España con YouTube Data API v3. Conserva cada relación municipio–consulta–video, descarga una sola vez los metadatos de cada `video_id` por ejecución y escribe resultados locales de forma atómica.
+Pipeline para recopilar datos crudos de videos turísticos de España con YouTube Data API v3. Puede ejecutarse localmente desde el Excel o en Azure mediante Power Automate, Azure Functions, Queue Storage y Azure SQL Database.
 
-No implementa comentarios, NLP, Azure SQL, Azure Functions, Power Automate ni SharePoint.
+## Arquitectura de Azure
 
-## Requisitos e instalación
+Se despliega una sola **Aplicación de funciones** que contiene tres funciones:
 
-- Python 3.11 o posterior. El entorno reproducible incluido usa Python 3.13.
-- Una clave de YouTube Data API v3 en `YOUTUBE_API_KEY`.
-- [`uv`](https://docs.astral.sh/uv/) o una instalación estándar de Python/pip.
+1. `StartYoutubeJob`: recibe el `POST` de Power Automate y publica el trabajo en la cola `youtube-jobs`.
+2. `ProcessYoutubeJob`: consulta YouTube y guarda búsquedas, videos, estadísticas y comentarios en las tablas `dbo`.
+3. `GetYoutubeJob`: permite consultar el estado mediante `run_id`.
 
-Con `uv`:
+La cola evita que Power Automate espere mientras se recorren videos y comentarios. Las búsquedas usan inglés, `relevanceLanguage=en` y `regionCode=ES`. Los comentarios se conservan en su idioma original y no se aplica un filtro de idioma.
+
+La guía completa está en [docs/AZURE_DEPLOYMENT.md](docs/AZURE_DEPLOYMENT.md).
+
+## Contrato del POST
+
+Ruta: `POST /api/youtube/jobs`
+
+```json
+{
+  "flow_run_id": "power-automate-run-001",
+  "place_id": "ES-41091",
+  "municipio": "Sevilla",
+  "provincia": "Sevilla",
+  "comunidad_autonoma": "Andalucía",
+  "tipologia_principal": "Turismo cultural",
+  "consulta_en_review": "Seville Spain travel review",
+  "consulta_en_que_hacer": "Seville Spain things to do",
+  "published_after": "2025-01-01T00:00:00Z",
+  "max_results_per_query": 25,
+  "max_comments_per_video": 100,
+  "search_order": "relevance"
+}
+```
+
+También se puede enviar `queries` como una lista de textos en inglés. Si se suministra, reemplaza las dos columnas `consulta_en_*`.
+
+Respuesta aceptada:
+
+```json
+{
+  "run_id": "2f6fb262-e2af-4bc4-aefd-8ac451a1d295",
+  "status": "RECEIVED",
+  "status_url": "/api/youtube/jobs/2f6fb262-e2af-4bc4-aefd-8ac451a1d295"
+}
+```
+
+`flow_run_id` hace idempotente un reintento de Power Automate: el mismo valor genera el mismo `run_id`.
+
+## Configuración
+
+Variables requeridas:
+
+- `AzureWebJobsStorage`: conexión a la cuenta de almacenamiento de la Function App.
+- `YOUTUBE_API_KEY`: clave de YouTube Data API v3.
+- `SQL_CONNECTION_STRING`: conexión a Azure SQL mediante identidad administrada.
+- `YOUTUBE_MAX_COMMENTS_PER_VIDEO`: límite predeterminado opcional. Si queda vacío y el POST no envía otro límite, se recorren todos los comentarios disponibles.
+
+Ejemplo de conexión en Azure:
+
+```text
+Server=<servidor>.database.windows.net;Database=<base>;Authentication=ActiveDirectoryMSI;Encrypt=yes;TrustServerCertificate=no;
+```
+
+No se guarda ninguna respuesta completa como JSON. Solo los atributos directos definidos en las tablas `dbo`; los campos multivalor propios del video (`tags`, miniaturas, temas y restricciones regionales) permanecen en sus columnas JSON.
+
+## Desarrollo local
+
+Requisitos: Python 3.11 o posterior, `uv` y una clave de YouTube.
 
 ```powershell
 uv sync --extra dev
 Copy-Item .env.example .env
+uv run python -m pytest
 ```
 
-Edita `.env` localmente y reemplaza únicamente el marcador de `YOUTUBE_API_KEY`. `.env` está excluido de Git.
-
-## Catálogo real
-
-El libro entregado contiene 122 filas de datos en `tbl_lugares`, hoja `Lugares`. El lector localiza la tabla por nombre, no por la hoja. Sus nombres difieren del esquema orientativo:
-
-| Concepto esperado | Columna real |
-|---|---|
-| `nombre_lugar` / `categoria` | `municipio` / `tipologia_principal` |
-| `consulta_1` … `consulta_4` | `consulta_es_turismo`, `consulta_es_opiniones`, `consulta_en_review`, `consulta_en_que_hacer` |
-| `idioma` | `relevance_language` |
-| `max_videos` | `max_resultados_consulta` |
-| `lote` | `lote_carga` |
-| orden de búsqueda | `orden_busqueda` |
-
-El validador entiende también los alias orientativos de consultas, idioma, máximo y lote para facilitar una evolución futura.
-
-## Piloto de cinco municipios
-
-El Excel está actualmente en la raíz del repositorio. Con la clave ya definida en `.env`, ejecuta tú mismo:
+Para ejecutar el pipeline local del Excel:
 
 ```powershell
 uv run python -m src.main --catalog-path ".\catalogo_municipios_turisticos_espana_youtube.xlsx" --max-places 5
 ```
 
-Para reducir aún más el piloto, añade `--max-queries-per-place 1`. Para generar CSV además de Parquet, añade `--csv`.
-
-La CLI procesa como máximo cinco municipios por defecto. No existe un comando que lance automáticamente las 122 filas.
-
-## Salidas
-
-Se crean en `output/`:
-
-- `youtube_search_results.parquet`: una fila por combinación de municipio, consulta y video.
-- `youtube_video_metadata.parquet`: una fila de campos directos por `video_id`.
-- `youtube_video_derived.parquet`: métricas calculadas, separadas explícitamente.
-- `youtube_run_summary.json`: estado, errores, conteos de llamadas y cuota estimada.
-
-La estimación sigue la referencia actual: una unidad por llamada a `search.list` y a `videos.list`; `search.list` tiene además su propio límite de llamadas. Consulta la [referencia de búsqueda](https://developers.google.com/youtube/v3/docs/search/list), la [referencia de videos](https://developers.google.com/youtube/v3/docs/videos/list) y el [cálculo de cuota](https://developers.google.com/youtube/v3/determine_quota_cost).
-
-## Pruebas
-
-```powershell
-uv run python -m pytest
-```
-
-Todas las respuestas de YouTube se simulan. Las pruebas no leen `YOUTUBE_API_KEY` ni consumen cuota real.
-
+Las pruebas usan respuestas simuladas y no consumen cuota de YouTube.

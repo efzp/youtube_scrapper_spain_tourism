@@ -50,6 +50,9 @@ class SearchResult:
     relevance_language: str
     published_after: str | None
     retrieved_at: str
+    youtube_kind: str | None = None
+    youtube_etag: str | None = None
+    page_number: int | None = None
 
 
 @dataclass(slots=True)

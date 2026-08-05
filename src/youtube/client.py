@@ -93,3 +93,18 @@ class YouTubeClient:
             sleep=self._sleep,
         )
 
+    def comment_threads(self, **parameters: Any) -> dict[str, Any]:
+        """Ejecuta `commentThreads.list` con reintentos seguros."""
+        return execute_with_retry(
+            lambda: self._service.commentThreads().list(**parameters).execute(),
+            max_attempts=self._max_attempts,
+            sleep=self._sleep,
+        )
+
+    def comments(self, **parameters: Any) -> dict[str, Any]:
+        """Ejecuta `comments.list` con reintentos seguros."""
+        return execute_with_retry(
+            lambda: self._service.comments().list(**parameters).execute(),
+            max_attempts=self._max_attempts,
+            sleep=self._sleep,
+        )

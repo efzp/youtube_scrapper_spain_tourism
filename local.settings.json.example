@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "YOUTUBE_API_KEY": "REEMPLAZAR_CON_TU_CLAVE",
+    "SQL_CONNECTION_STRING": "Server=sql-youtube-tourism-dev-XXXX.database.windows.net;Database=sqldb-youtube-tourism-dev;Authentication=ActiveDirectoryDefault;Encrypt=yes;TrustServerCertificate=no;",
+    "YOUTUBE_MAX_COMMENTS_PER_VIDEO": "100"
+  }
+}

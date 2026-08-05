@@ -43,6 +43,7 @@ def search_task(
     results: list[SearchResult] = []
     seen_video_ids: set[str] = set()
     page_token: str | None = None
+    page_number = 0
     calls = 0
     raw_results = 0
 
@@ -64,6 +65,7 @@ def search_task(
             parameters["pageToken"] = page_token
         response = client.search(**parameters)
         calls += 1
+        page_number += 1
         items = response.get("items") or []
         raw_results += len(items)
         for item in items:
@@ -86,6 +88,13 @@ def search_task(
                     relevance_language=task.place.relevance_language,
                     published_after=published_after,
                     retrieved_at=retrieved_at,
+                    youtube_kind=(
+                        str(item.get("kind")) if item.get("kind") is not None else None
+                    ),
+                    youtube_etag=(
+                        str(item.get("etag")) if item.get("etag") is not None else None
+                    ),
+                    page_number=page_number,
                 )
             )
             if len(results) >= task.place.max_results_per_query:

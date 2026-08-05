@@ -1,7 +1,10 @@
 .env
+local.settings.json
 .venv/
+.uv-cache/
 __pycache__/
 .pytest_cache/
+.pytest-tmp/
 .ipynb_checkpoints/
 output/
 data/
@@ -10,3 +13,4 @@ data/
 *.egg-info/
 .coverage
 
+.python_packages
