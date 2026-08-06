@@ -45,3 +45,38 @@ def test_limits_queries_per_place(active_row: dict[str, object]) -> None:
     assert len(tasks) == 1
     assert tasks[0].query == '"Sevilla" turismo'
 
+
+def test_renders_active_question_pool_for_each_place(
+    active_row: dict[str, object],
+) -> None:
+    active_row["tipologia_principal"] = "Urbano cultural"
+    questions = [
+        {
+            "pregunta_id": "Q001",
+            "plantilla_en": "{municipio}, {provincia}, Spain travel review",
+            "orden": 1,
+            "activa": 1,
+            "aplica_tipologia": "TODAS",
+        },
+        {
+            "pregunta_id": "Q002",
+            "plantilla_en": "things to do in {municipio}, {provincia}, Spain",
+            "orden": 2,
+            "activa": 1,
+            "aplica_tipologia": "Urbano cultural",
+        },
+        {
+            "pregunta_id": "Q003",
+            "plantilla_en": "inactive {municipio}",
+            "orden": 3,
+            "activa": 0,
+            "aplica_tipologia": "TODAS",
+        },
+    ]
+
+    place = validate_catalog([active_row], questions)[0]
+
+    assert place.queries == (
+        "Sevilla, Sevilla, Spain travel review",
+        "things to do in Sevilla, Sevilla, Spain",
+    )

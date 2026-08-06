@@ -45,6 +45,27 @@ def _datetime(value: Any, name: str) -> datetime | None:
 
 
 @dataclass(frozen=True, slots=True)
+class JobQuery:
+    """Consulta renderizada y su identificador en `tbl_preguntas`."""
+
+    question_id: str | None
+    query_text: str
+
+    @classmethod
+    def from_value(cls, value: Any) -> "JobQuery":
+        if isinstance(value, Mapping):
+            query_text = _required_text(value, "query_text")
+            question_id = _optional_text(value, "question_id")
+            return cls(question_id=question_id, query_text=query_text)
+        if value is None or not str(value).strip():
+            raise JobValidationError("Cada elemento de 'queries' debe contener query_text.")
+        return cls(question_id=None, query_text=str(value).strip())
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {"question_id": self.question_id, "query_text": self.query_text}
+
+
+@dataclass(frozen=True, slots=True)
 class JobRequest:
     """Municipio y consultas inglesas enviados por Power Automate."""
 
@@ -52,7 +73,7 @@ class JobRequest:
     municipio: str
     provincia: str
     comunidad_autonoma: str
-    queries: tuple[str, ...]
+    queries: tuple[JobQuery, ...]
     tipologia_principal: str | None = None
     flow_run_id: str | None = None
     published_after: datetime | None = None
@@ -70,17 +91,21 @@ class JobRequest:
         supplied_queries = payload.get("queries")
         if supplied_queries is not None:
             if not isinstance(supplied_queries, list):
-                raise JobValidationError("El campo 'queries' debe ser una lista de textos.")
+                raise JobValidationError("El campo 'queries' debe ser una lista.")
             query_values = supplied_queries
         else:
             query_values = [payload.get(field) for field in ENGLISH_QUERY_FIELDS]
-        queries = tuple(
-            dict.fromkeys(
-                str(value).strip()
-                for value in query_values
-                if value is not None and str(value).strip()
-            )
-        )
+        queries_list: list[JobQuery] = []
+        seen_query_texts: set[str] = set()
+        for value in query_values:
+            if value is None or (not isinstance(value, Mapping) and not str(value).strip()):
+                continue
+            query = JobQuery.from_value(value)
+            if query.query_text in seen_query_texts:
+                continue
+            seen_query_texts.add(query.query_text)
+            queries_list.append(query)
+        queries = tuple(queries_list)
         if not queries:
             raise JobValidationError(
                 "Debe enviar 'queries' o al menos una consulta inglesa del Excel."
@@ -122,13 +147,17 @@ class JobRequest:
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
-        payload["queries"] = list(self.queries)
+        payload["queries"] = [query.to_dict() for query in self.queries]
         payload["published_after"] = (
             self.published_after.astimezone(timezone.utc).isoformat()
             if self.published_after
             else None
         )
         return payload
+
+    @property
+    def query_texts(self) -> tuple[str, ...]:
+        return tuple(query.query_text for query in self.queries)
 
 
 @dataclass(frozen=True, slots=True)

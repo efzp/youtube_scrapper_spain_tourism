@@ -18,6 +18,12 @@ QUERY_COLUMNS = (
     "consulta_4",
 )
 REQUIRED_COLUMNS = ("place_id", "municipio", "provincia", "comunidad_autonoma", "activo")
+TEMPLATE_FIELDS = (
+    "municipio",
+    "provincia",
+    "comunidad_autonoma",
+    "tipologia_principal",
+)
 
 
 class CatalogValidationError(ValueError):
@@ -59,10 +65,52 @@ def _published_after(value: Any, row_number: int) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def validate_catalog(rows: Iterable[dict[str, Any]]) -> list[PlaceRecord]:
+def _render_question_pool(
+    row: dict[str, Any],
+    question_rows: list[dict[str, Any]],
+    row_number: int,
+) -> tuple[str, ...]:
+    place_type = str(row.get("tipologia_principal") or "").strip()
+    selected: list[tuple[int, str]] = []
+    for question_number, question in enumerate(question_rows, start=2):
+        if not _is_active(question.get("activa")):
+            continue
+        applies_to = str(question.get("aplica_tipologia") or "TODAS").strip()
+        if applies_to.casefold() != "todas" and applies_to.casefold() != place_type.casefold():
+            continue
+        template = question.get("plantilla_en")
+        if template is None or not str(template).strip():
+            raise CatalogValidationError(
+                f"Pregunta fila {question_number}: falta plantilla_en."
+            )
+        rendered = str(template).strip()
+        for field in TEMPLATE_FIELDS:
+            rendered = rendered.replace(
+                "{" + field + "}", str(row.get(field) or "").strip()
+            )
+        try:
+            order = int(question.get("orden") or 999)
+        except (TypeError, ValueError) as exc:
+            raise CatalogValidationError(
+                f"Pregunta fila {question_number}: orden debe ser un entero."
+            ) from exc
+        selected.append((order, " ".join(rendered.split())))
+    queries = tuple(dict.fromkeys(text for _, text in sorted(selected)))
+    if not queries:
+        raise CatalogValidationError(
+            f"Fila {row_number}: no tiene preguntas activas aplicables."
+        )
+    return queries
+
+
+def validate_catalog(
+    rows: Iterable[dict[str, Any]],
+    question_rows: Iterable[dict[str, Any]] | None = None,
+) -> list[PlaceRecord]:
     """Filtra filas activas, valida campos y devuelve municipios normalizados."""
     records: list[PlaceRecord] = []
     errors: list[str] = []
+    question_pool = list(question_rows) if question_rows is not None else None
     for row_number, row in enumerate(rows, start=2):
         if not _is_active(row.get("activo")):
             continue
@@ -72,13 +120,16 @@ def validate_catalog(rows: Iterable[dict[str, Any]]) -> list[PlaceRecord]:
                 raise CatalogValidationError(
                     f"Fila {row_number}: faltan columnas {', '.join(missing_columns)}."
                 )
-            queries = tuple(
-                dict.fromkeys(
-                    str(row[column]).strip()
-                    for column in QUERY_COLUMNS
-                    if row.get(column) is not None and str(row[column]).strip()
+            if question_pool is not None:
+                queries = _render_question_pool(row, question_pool, row_number)
+            else:
+                queries = tuple(
+                    dict.fromkeys(
+                        str(row[column]).strip()
+                        for column in QUERY_COLUMNS
+                        if row.get(column) is not None and str(row[column]).strip()
+                    )
                 )
-            )
             if not queries:
                 raise CatalogValidationError(f"Fila {row_number}: no contiene consultas.")
             max_results_raw = row.get("max_resultados_consulta", row.get("max_videos", 25))
@@ -98,7 +149,7 @@ def validate_catalog(rows: Iterable[dict[str, Any]]) -> list[PlaceRecord]:
                     queries=queries,
                     region_code=str(row.get("region_code") or "ES").strip().upper(),
                     relevance_language=str(
-                        row.get("relevance_language", row.get("idioma", "es")) or "es"
+                        row.get("relevance_language", row.get("idioma", "en")) or "en"
                     ).strip(),
                     published_after=_published_after(row.get("fecha_desde"), row_number),
                     max_results_per_query=max_results,
@@ -130,4 +181,3 @@ def build_search_tasks(
         queries = place.queries[:max_queries_per_place]
         tasks.extend(SearchTask(place=place, query=query) for query in queries)
     return tasks
-

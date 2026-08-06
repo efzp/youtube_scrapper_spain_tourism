@@ -65,7 +65,7 @@ class CloudPipeline:
             municipio=job.municipio,
             provincia=job.provincia,
             comunidad_autonoma=job.comunidad_autonoma,
-            queries=job.queries,
+            queries=job.query_texts,
             region_code="ES",
             relevance_language="en",
             published_after=job.published_after,
@@ -74,7 +74,8 @@ class CloudPipeline:
         )
         data = RawRunData()
         successful_queries = 0
-        for query in job.queries:
+        for query_spec in job.queries:
+            query = query_spec.query_text
             data.query_results[query] = []
             try:
                 outcome = search_task(

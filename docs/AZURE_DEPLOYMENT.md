@@ -91,11 +91,19 @@ $body = @{
     municipio = "Sevilla"
     provincia = "Sevilla"
     comunidad_autonoma = "Andalucía"
-    consulta_en_review = "Seville Spain travel review"
-    consulta_en_que_hacer = "Seville Spain things to do"
+    queries = @(
+        @{
+            question_id = "Q001"
+            query_text = "Seville, Seville, Spain travel review"
+        },
+        @{
+            question_id = "Q002"
+            query_text = "things to do in Seville, Seville, Spain"
+        }
+    )
     max_results_per_query = 5
     max_comments_per_video = 10
-} | ConvertTo-Json
+} | ConvertTo-Json -Depth 4
 
 Invoke-RestMethod -Method Post -Uri "<URL-DE-STARTYOUTUBEJOB>" -ContentType "application/json" -Body $body
 ```
@@ -104,13 +112,41 @@ La respuesta debe ser HTTP 202 y contener `run_id`. Luego consulta `GetYoutubeJo
 
 ## 8. Conectar Power Automate
 
-En el flujo, después de **Listar las filas presentes en una tabla** y del filtro:
+Agrega dos acciones **Listar las filas presentes en una tabla**:
+
+- `ListarLugares`: tabla `tbl_lugares`.
+- `ListarPreguntas`: tabla `tbl_preguntas`.
+
+Dentro de `ProcesarLoteActual`, filtra las preguntas activas que sean globales o coincidan con la tipología del municipio. Después usa **Seleccionar** para construir el arreglo sin inicializar una variable:
+
+```text
+question_id = item()?['pregunta_id']
+query_text = replace(
+  replace(
+    replace(
+      replace(
+        item()?['plantilla_en'],
+        '{municipio}',
+        items('ProcesarLoteActual')?['municipio']
+      ),
+      '{provincia}',
+      items('ProcesarLoteActual')?['provincia']
+    ),
+    '{comunidad_autonoma}',
+    items('ProcesarLoteActual')?['comunidad_autonoma']
+  ),
+  '{tipologia_principal}',
+  items('ProcesarLoteActual')?['tipologia_principal']
+)
+```
+
+En el cuerpo HTTP, `queries` debe apuntar directamente a la salida de **Seleccionar**. Luego:
 
 1. Agrega la acción **HTTP**.
 2. Método: `POST`.
 3. URI: URL de `StartYoutubeJob` con su parámetro `code`.
 4. Encabezado `Content-Type`: `application/json`.
-5. Construye el cuerpo con la fila actual. Envía solo las consultas inglesas.
+5. Construye el cuerpo con la fila actual y `queries` con la salida de **Seleccionar**.
 6. Usa como `flow_run_id` un identificador estable de la ejecución y de la fila para que un reintento no duplique datos.
 7. Guarda el `run_id` devuelto si el flujo necesita comprobar el estado posteriormente.
 

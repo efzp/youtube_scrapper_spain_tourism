@@ -26,8 +26,16 @@ Ruta: `POST /api/youtube/jobs`
   "provincia": "Sevilla",
   "comunidad_autonoma": "Andalucía",
   "tipologia_principal": "Turismo cultural",
-  "consulta_en_review": "Seville Spain travel review",
-  "consulta_en_que_hacer": "Seville Spain things to do",
+  "queries": [
+    {
+      "question_id": "Q001",
+      "query_text": "Seville, Seville, Spain travel review"
+    },
+    {
+      "question_id": "Q002",
+      "query_text": "things to do in Seville, Seville, Spain"
+    }
+  ],
   "published_after": "2025-01-01T00:00:00Z",
   "max_results_per_query": 25,
   "max_comments_per_video": 100,
@@ -35,7 +43,11 @@ Ruta: `POST /api/youtube/jobs`
 }
 ```
 
-También se puede enviar `queries` como una lista de textos en inglés. Si se suministra, reemplaza las dos columnas `consulta_en_*`.
+El catálogo separa `tbl_lugares` de `tbl_preguntas`. Power Automate sustituye los marcadores de cada `plantilla_en` activa y envía `queries` como una lista de objetos. Por compatibilidad, la Function también acepta una lista de textos o las antiguas columnas `consulta_en_*`.
+
+El modelo de prioridad es `0 = enviado/procesado`, `1 = lote actual` y `2 = pendiente`. Al terminar correctamente un lote, sus filas pasan a `0` y el siguiente lote pasa de `2` a `1`.
+
+Para conservar `question_id` en los datos crudos, ejecute una vez [sql/002_add_source_question_id.sql](sql/002_add_source_question_id.sql). La Function sigue funcionando con el esquema anterior, pero no podrá persistir ese identificador hasta aplicar la migración.
 
 Respuesta aceptada:
 

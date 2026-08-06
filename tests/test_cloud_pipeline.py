@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from src.cloud.contracts import JobEnvelope, JobRequest
+from src.cloud.contracts import JobEnvelope, JobQuery, JobRequest
 from src.cloud.pipeline import CloudPipeline, RawRunData
 
 
@@ -51,7 +51,7 @@ def test_cloud_pipeline_uses_english_search_and_keeps_only_raw_fields() -> None:
         municipio="Sevilla",
         provincia="Sevilla",
         comunidad_autonoma="Andalucia",
-        queries=('"Seville Spain" travel review',),
+        queries=(JobQuery("Q001", '"Seville Spain" travel review'),),
         max_comments_per_video=10,
     )
     envelope = JobEnvelope.create(job)

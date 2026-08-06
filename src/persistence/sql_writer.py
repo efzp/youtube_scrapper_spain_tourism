@@ -144,26 +144,52 @@ class SqlRunWriter:
             ):
                 cursor.execute(f"DELETE FROM {table} WHERE run_id = ?", (run_id,))
 
+            cursor.execute(
+                "SELECT COL_LENGTH(N'dbo.search_queries', N'source_question_id')"
+            )
+            supports_question_id = cursor.fetchone()[0] is not None
             query_ids: dict[str, int] = {}
-            for order, query_text in enumerate(envelope.job.queries, start=1):
-                cursor.execute(
-                    """
-                    INSERT dbo.search_queries
-                        (run_id, place_id, query_text, query_order,
-                         query_language, relevance_language, region_code,
-                         requested_max_results, published_after)
-                    OUTPUT INSERTED.query_id
-                    VALUES (?, ?, ?, ?, 'en', 'en', 'ES', ?, ?)
-                    """,
-                    (
-                        run_id,
-                        envelope.job.place_id,
-                        query_text,
-                        order,
-                        envelope.job.max_results_per_query,
-                        envelope.job.published_after,
-                    ),
-                )
+            for order, query in enumerate(envelope.job.queries, start=1):
+                query_text = query.query_text
+                if supports_question_id:
+                    cursor.execute(
+                        """
+                        INSERT dbo.search_queries
+                            (run_id, place_id, source_question_id, query_text,
+                             query_order, query_language, relevance_language,
+                             region_code, requested_max_results, published_after)
+                        OUTPUT INSERTED.query_id
+                        VALUES (?, ?, ?, ?, ?, 'en', 'en', 'ES', ?, ?)
+                        """,
+                        (
+                            run_id,
+                            envelope.job.place_id,
+                            query.question_id,
+                            query_text,
+                            order,
+                            envelope.job.max_results_per_query,
+                            envelope.job.published_after,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT dbo.search_queries
+                            (run_id, place_id, query_text, query_order,
+                             query_language, relevance_language, region_code,
+                             requested_max_results, published_after)
+                        OUTPUT INSERTED.query_id
+                        VALUES (?, ?, ?, ?, 'en', 'en', 'ES', ?, ?)
+                        """,
+                        (
+                            run_id,
+                            envelope.job.place_id,
+                            query_text,
+                            order,
+                            envelope.job.max_results_per_query,
+                            envelope.job.published_after,
+                        ),
+                    )
                 row = cursor.fetchone()
                 query_ids[query_text] = int(row[0])
 

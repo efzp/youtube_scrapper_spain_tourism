@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 from uuid import uuid4
 
-from src.catalog.excel_reader import read_excel_table
+from src.catalog.excel_reader import CatalogReadError, read_excel_table
 from src.catalog.validators import build_search_tasks, validate_catalog
 from src.config import ConfigurationError, Settings
 from src.models import RunSummary, SearchResult
@@ -91,7 +91,11 @@ def run_pipeline(
 
     try:
         rows = read_excel_table(settings.catalog_path)
-        places = validate_catalog(rows)[: settings.max_places]
+        try:
+            question_rows = read_excel_table(settings.catalog_path, "tbl_preguntas")
+        except CatalogReadError:
+            question_rows = None
+        places = validate_catalog(rows, question_rows)[: settings.max_places]
         if not places:
             raise ValueError("El catalogo no contiene municipios activos para procesar.")
         tasks = build_search_tasks(places, settings.max_queries_per_place)

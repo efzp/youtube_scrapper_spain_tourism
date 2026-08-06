@@ -22,7 +22,7 @@ def _payload() -> dict[str, object]:
 def test_accepts_only_english_excel_columns() -> None:
     job = JobRequest.from_mapping(_payload())
 
-    assert job.queries == (
+    assert job.query_texts == (
         '"Seville Spain" travel review',
         '"Seville Spain" things to do',
     )
@@ -39,6 +39,24 @@ def test_queue_envelope_is_deterministic_for_flow_retry() -> None:
 
     assert first.run_id == second.run_id
     assert restored.run_id == first.run_id
+    assert restored.job.queries == job.queries
+
+
+def test_accepts_question_objects_from_power_automate() -> None:
+    payload = _payload()
+    payload["queries"] = [
+        {"question_id": "Q001", "query_text": "Seville Spain travel review"},
+        {"question_id": "Q002", "query_text": "things to do in Seville Spain"},
+    ]
+
+    job = JobRequest.from_mapping(payload)
+    restored = JobEnvelope.from_json(JobEnvelope.create(job).to_json())
+
+    assert job.queries[0].question_id == "Q001"
+    assert job.query_texts == (
+        "Seville Spain travel review",
+        "things to do in Seville Spain",
+    )
     assert restored.job.queries == job.queries
 
 
